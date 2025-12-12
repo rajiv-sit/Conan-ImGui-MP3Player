@@ -92,6 +92,7 @@ namespace Player
 		std::vector<float>       mEqGainsDb;
 		std::array<const char*, 5> mEqLabels;
 		std::vector<float>       mWaveformPreview;
+		void refreshWaveformPreview();
 
 		char mFileInputBuffer[512];
 
@@ -107,5 +108,4 @@ namespace Player
 	};
 
 }
-
 

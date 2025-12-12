@@ -237,6 +237,10 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
             auto waveform = mAudioPlayer.getWaveformPreview(256);
             ImGui::Separator();
             ImGui::TextUnformatted("Waveform");
+            if (mWaveformPreview.empty() && mAudioPlayer.isOpen())
+            {
+                refreshWaveformPreview();
+            }
             if (!mWaveformPreview.empty())
             {
                 ImGui::PlotLines("##wave", mWaveformPreview.data(), static_cast<int>(mWaveformPreview.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(-FLT_MIN, 120));
@@ -380,7 +384,7 @@ bool Player::MP3Visualization::loadCurrentTrack()
     }
 
     mMP3FileName  = resolvedStr;
-    mWaveformPreview = mAudioPlayer.getWaveformPreview(512);
+    refreshWaveformPreview();
     mStatusMessage.clear();
     return true;
 }
@@ -438,4 +442,9 @@ std::filesystem::path Player::MP3Visualization::getExecutableDir() const
     DWORD len = GetModuleFileNameW(nullptr, pathBuf.data(), static_cast<DWORD>(pathBuf.size()));
     std::filesystem::path exePath(std::wstring(pathBuf.data(), len));
     return exePath.parent_path();
+}
+
+void Player::MP3Visualization::refreshWaveformPreview()
+{
+    mWaveformPreview = mAudioPlayer.getWaveformPreview(512);
 }
