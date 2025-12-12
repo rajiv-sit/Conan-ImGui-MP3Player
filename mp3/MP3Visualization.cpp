@@ -40,6 +40,7 @@ Player::MP3Visualization::MP3Visualization()
     , mQuitRequested(false)
     , mEqGainsDb(5, 0.0f)
     , mEqLabels({ "60", "230", "910", "3.6k", "14k" })
+    , mWaveformPreview()
     , mBuffer(new char[1000])
 {
     memset(mFileInputBuffer, 0, sizeof(mFileInputBuffer));
@@ -236,9 +237,9 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
             auto waveform = mAudioPlayer.getWaveformPreview(256);
             ImGui::Separator();
             ImGui::TextUnformatted("Waveform");
-            if (!waveform.empty())
+            if (!mWaveformPreview.empty())
             {
-                ImGui::PlotLines("##wave", waveform.data(), static_cast<int>(waveform.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(-FLT_MIN, 120));
+                ImGui::PlotLines("##wave", mWaveformPreview.data(), static_cast<int>(mWaveformPreview.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(-FLT_MIN, 120));
                 const float prog = (duration > 0.0F) ? std::clamp(static_cast<float>(mAudioPlayer.getPosition()) / duration, 0.0F, 1.0F) : 0.0F;
                 ImVec2 min = ImGui::GetItemRectMin();
                 ImVec2 max = ImGui::GetItemRectMax();
@@ -379,6 +380,7 @@ bool Player::MP3Visualization::loadCurrentTrack()
     }
 
     mMP3FileName  = resolvedStr;
+    mWaveformPreview = mAudioPlayer.getWaveformPreview(512);
     mStatusMessage.clear();
     return true;
 }

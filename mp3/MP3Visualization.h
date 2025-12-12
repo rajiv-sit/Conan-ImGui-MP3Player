@@ -91,6 +91,7 @@ namespace Player
 		std::string              mStatusMessage;
 		std::vector<float>       mEqGainsDb;
 		std::array<const char*, 5> mEqLabels;
+		std::vector<float>       mWaveformPreview;
 
 		char mFileInputBuffer[512];
 
@@ -106,6 +107,5 @@ namespace Player
 	};
 
 }
-
 
 
