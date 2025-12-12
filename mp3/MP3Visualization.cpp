@@ -234,14 +234,13 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
                 ImGui::Text("Bitrate: %u kbps", meta.bitrate / 1000);
             }
 
-            auto waveform = mAudioPlayer.getWaveformPreview(256);
             ImGui::Separator();
             ImGui::TextUnformatted("Waveform");
-            if (mWaveformPreview.empty() && mAudioPlayer.isOpen())
+            if (mAudioPlayer.isPlaying() && mWaveformPreview.empty() && mAudioPlayer.isOpen())
             {
                 refreshWaveformPreview();
             }
-            if (!mWaveformPreview.empty())
+            if (mAudioPlayer.isPlaying() && !mWaveformPreview.empty())
             {
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_PlotLinesHovered, ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0f));
@@ -256,7 +255,7 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
             }
             else
             {
-                ImGui::TextDisabled("Waveform unavailable. Load a track to view.");
+                ImGui::TextDisabled("Waveform appears while playing.");
             }
             ImGui::EndChild();
 
@@ -402,6 +401,10 @@ void Player::MP3Visualization::playSelected(double startSeconds)
         }
     }
     mAudioPlayer.play(startSeconds);
+    if (mWaveformPreview.empty())
+    {
+        refreshWaveformPreview();
+    }
 }
 
 void Player::MP3Visualization::moveToTrack(int delta)
