@@ -47,6 +47,7 @@ private:
 	bool         mIsPlaying = false;
 	bool         mIsPaused = false;
 	Metadata     mMetadata;
+	std::vector<float> mEqGainsDb;
 
 	/// helper to clear playback state
 	void resetWaveOut()
@@ -524,6 +525,12 @@ public:
 
 	const Metadata& getMetadata() const { return mMetadata; }
 
+	/// @brief Placeholder for future DSP: store requested EQ gains (dB)
+	void setEqualizerGains(const std::vector<float>& gainsDb)
+	{
+		mEqGainsDb = gainsDb;
+	}
+
 	/// @brief Extract a small waveform preview from the decoded PCM buffer
 	std::vector<float> getWaveformPreview(size_t sampleCount = 256) const
 	{
@@ -558,5 +565,4 @@ public:
 };
 
 #pragma function(memset, memcpy, memcmp)
-
 

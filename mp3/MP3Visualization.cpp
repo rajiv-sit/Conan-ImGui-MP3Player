@@ -38,6 +38,8 @@ Player::MP3Visualization::MP3Visualization()
     , mUserSeeking(false)
     , mStatusMessage()
     , mQuitRequested(false)
+    , mEqGainsDb(5, 0.0f)
+    , mEqLabels({ "60", "230", "910", "3.6k", "14k" })
     , mBuffer(new char[1000])
 {
     memset(mFileInputBuffer, 0, sizeof(mFileInputBuffer));
@@ -86,6 +88,10 @@ void Player::MP3Visualization::worldInitFcn()
 // World frame drawing functions
 void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
 {
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 8));
+
     // Create a new window for MP3 player
     ImGui::Begin("Cross-Hair Player", &mVisualFrameStatus, ImGuiWindowFlags_MenuBar);
 
@@ -107,6 +113,9 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
     ImGui::TextColored(ImVec4{UTILITYColors::Green.r, UTILITYColors::Green.g, UTILITYColors::Green.b, 1.0f}, getDayAndTime().c_str());
 
     ImGui::Spacing();
+    // Input card
+    ImGui::BeginChild("InputRow", ImVec2(-FLT_MIN, 70), true);
+    ImGui::TextUnformatted("Add a track");
     ImGui::InputTextWithHint("##mp3input", "Enter MP3 path", mFileInputBuffer, IM_ARRAYSIZE(mFileInputBuffer));
     ImGui::SameLine();
     if (ImGui::Button("Add to Playlist"))
@@ -122,113 +131,164 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
             memset(mFileInputBuffer, 0, sizeof(mFileInputBuffer));
         }
     }
+    ImGui::EndChild();
 
-    if (ImGui::BeginListBox("Playlist", ImVec2(-FLT_MIN, 130)))
+    if (ImGui::BeginTable("layout", 2, ImGuiTableFlags_SizingStretchProp))
     {
-        for (int idx = 0; idx < static_cast<int>(mPlaylist.size()); ++idx)
+        ImGui::TableSetupColumn("Playlist", ImGuiTableColumnFlags_WidthStretch, 0.40f);
+        ImGui::TableSetupColumn("Playback", ImGuiTableColumnFlags_WidthStretch, 0.60f);
+        ImGui::TableNextRow();
+
+        // Playlist column
+        ImGui::TableSetColumnIndex(0);
+        ImGui::BeginChild("PlaylistCard", ImVec2(-FLT_MIN, 400), true);
+        ImGui::TextUnformatted("Playlist");
+        if (ImGui::BeginListBox("##playlistbox", ImVec2(-FLT_MIN, 240)))
         {
-            const bool selected = idx == mCurrentIndex;
-            if (ImGui::Selectable(mPlaylist[idx].c_str(), selected))
+            for (int idx = 0; idx < static_cast<int>(mPlaylist.size()); ++idx)
             {
-                mCurrentIndex = idx;
-                loadCurrentTrack();
+                const bool selected = idx == mCurrentIndex;
+                if (ImGui::Selectable(mPlaylist[idx].c_str(), selected))
+                {
+                    mCurrentIndex = idx;
+                    loadCurrentTrack();
+                }
+            }
+            ImGui::EndListBox();
+        }
+        if (ImGui::Button("Play", ImVec2(-FLT_MIN, 0)))
+        {
+            playSelected(mUserSeeking ? mSeekSeconds : 0.0);
+        }
+        if (ImGui::Button(mAudioPlayer.isPaused() ? "Resume" : "Pause", ImVec2(-FLT_MIN, 0)))
+        {
+            if (mAudioPlayer.isPaused())
+            {
+                mAudioPlayer.unSetPause();
+            }
+            else
+            {
+                mAudioPlayer.setPause();
             }
         }
-        ImGui::EndListBox();
-    }
-
-    if (ImGui::Button("Previous"))
-    {
-        moveToTrack(-1);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Play"))
-    {
-        playSelected(mUserSeeking ? mSeekSeconds : 0.0);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button(mAudioPlayer.isPaused() ? "Resume" : "Pause"))
-    {
-        if (mAudioPlayer.isPaused())
+        if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0)))
         {
-            mAudioPlayer.unSetPause();
+            mAudioPlayer.stop();
+            mSeekSeconds = 0.0F;
         }
-        else
+        ImGui::Separator();
+        if (ImGui::Button("Previous", ImVec2(-FLT_MIN, 0)))
         {
-            mAudioPlayer.setPause();
+            moveToTrack(-1);
         }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Stop"))
-    {
-        mAudioPlayer.stop();
-        mSeekSeconds = 0.0F;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Next"))
-    {
-        moveToTrack(1);
-    }
-
-    if (mWorldFrameSettings.displayFile)
-    {
-        const float duration = static_cast<float>(mAudioPlayer.getDuration());
-        if (duration > 0.0F)
+        if (ImGui::Button("Next", ImVec2(-FLT_MIN, 0)))
         {
-            if (!mUserSeeking)
+            moveToTrack(1);
+        }
+        ImGui::EndChild();
+
+        // Playback / details column
+        ImGui::TableSetColumnIndex(1);
+        if (mWorldFrameSettings.displayFile)
+        {
+            const float duration = static_cast<float>(mAudioPlayer.getDuration());
+
+            ImGui::BeginChild("PlaybackCard", ImVec2(-FLT_MIN, 420), true);
+            ImGui::TextUnformatted("Playback");
+            if (duration > 0.0F)
             {
-                mSeekSeconds = static_cast<float>(mAudioPlayer.getPosition());
+                if (!mUserSeeking)
+                {
+                    mSeekSeconds = static_cast<float>(mAudioPlayer.getPosition());
+                }
+                ImGui::SliderFloat("Seek", &mSeekSeconds, 0.0f, duration, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
+                if (ImGui::IsItemActivated())
+                {
+                    mUserSeeking = true;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                {
+                    playSelected(mSeekSeconds);
+                    mUserSeeking = false;
+                }
+                ImGui::Text("Time: %.1fs / %.1fs", mAudioPlayer.getPosition(), mAudioPlayer.getDuration());
             }
-            ImGui::SliderFloat("Seek", &mSeekSeconds, 0.0f, duration, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
-            if (ImGui::IsItemActivated())
+            else
             {
-                mUserSeeking = true;
+                ImGui::TextDisabled("Load a track to enable transport.");
             }
-            if (ImGui::IsItemDeactivatedAfterEdit())
+
+            ImGui::SliderFloat("Volume", &mVolumeNormalized, 0.0F, 1.0F);
+            ImGui::SliderFloat("Balance", &mBalance, -1.0F, 1.0F);
+
+            const auto& meta = mAudioPlayer.getMetadata();
+            ImGui::Separator();
+            ImGui::TextUnformatted("Now Playing");
+            ImGui::Text("File: %s", mMP3FileName.c_str());
+            ImGui::Text("Title: %s", wideToUtf8(meta.title).c_str());
+            ImGui::Text("Artist: %s", wideToUtf8(meta.artist).c_str());
+            ImGui::Text("Album: %s", wideToUtf8(meta.album).c_str());
+            if (meta.bitrate > 0)
             {
-                playSelected(mSeekSeconds);
-                mUserSeeking = false;
+                ImGui::Text("Bitrate: %u kbps", meta.bitrate / 1000);
             }
+
+            auto waveform = mAudioPlayer.getWaveformPreview(256);
+            ImGui::Separator();
+            ImGui::TextUnformatted("Waveform");
+            if (!waveform.empty())
+            {
+                ImGui::PlotLines("##wave", waveform.data(), static_cast<int>(waveform.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(-FLT_MIN, 120));
+                const float prog = (duration > 0.0F) ? std::clamp(static_cast<float>(mAudioPlayer.getPosition()) / duration, 0.0F, 1.0F) : 0.0F;
+                ImVec2 min = ImGui::GetItemRectMin();
+                ImVec2 max = ImGui::GetItemRectMax();
+                const float x = min.x + prog * (max.x - min.x);
+                auto* draw = ImGui::GetWindowDrawList();
+                draw->AddLine(ImVec2(x, min.y), ImVec2(x, max.y), IM_COL32(255, 64, 64, 255), 2.0f);
+            }
+            else
+            {
+                ImGui::TextDisabled("Waveform unavailable. Load a track to view.");
+            }
+            ImGui::EndChild();
+
+            ImGui::BeginChild("EQCard", ImVec2(-FLT_MIN, 200), true);
+            ImGui::TextUnformatted("Equalizer");
+            bool eqChanged = false;
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(16, 6));
+            for (size_t i = 0; i < mEqGainsDb.size(); ++i)
+            {
+                ImGui::BeginGroup();
+                ImGui::PushID(static_cast<int>(i));
+                eqChanged |= ImGui::VSliderFloat("##eq", ImVec2(28, 140), &mEqGainsDb[i], -12.0f, 12.0f, "%.1f");
+                ImGui::PopID();
+                ImGui::TextUnformatted(mEqLabels[i]);
+                ImGui::EndGroup();
+                if (i + 1 < mEqGainsDb.size())
+                {
+                    ImGui::SameLine();
+                }
+            }
+            ImGui::PopStyleVar();
+            if (eqChanged)
+            {
+                mAudioPlayer.setEqualizerGains(mEqGainsDb);
+            }
+            ImGui::EndChild();
         }
 
-        ImGui::SliderFloat("Volume", &mVolumeNormalized, 0.0F, 1.0F);
-        ImGui::SliderFloat("Balance", &mBalance, -1.0F, 1.0F);
-        const auto& meta = mAudioPlayer.getMetadata();
-        ImGui::Text("Title: %s", wideToUtf8(meta.title).c_str());
-        ImGui::Text("Artist: %s", wideToUtf8(meta.artist).c_str());
-        ImGui::Text("Album: %s", wideToUtf8(meta.album).c_str());
-        if (meta.bitrate > 0)
-        {
-            ImGui::Text("Bitrate: %u kbps", meta.bitrate / 1000);
-        }
-
-        auto waveform = mAudioPlayer.getWaveformPreview(256);
-        if (!waveform.empty())
-        {
-            ImGui::PlotLines("Waveform", waveform.data(), static_cast<int>(waveform.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(0, 90));
-
-            // Overlay playhead indicator
-            const float current = static_cast<float>(mAudioPlayer.getPosition());
-            const float prog    = (duration > 0.0F) ? std::clamp(current / duration, 0.0F, 1.0F) : 0.0F;
-            ImVec2 min = ImGui::GetItemRectMin();
-            ImVec2 max = ImGui::GetItemRectMax();
-            const float x = min.x + prog * (max.x - min.x);
-            auto* draw = ImGui::GetWindowDrawList();
-            draw->AddLine(ImVec2(x, min.y), ImVec2(x, max.y), IM_COL32(255, 64, 64, 255), 2.0f);
-        }
-        else
-        {
-            ImGui::TextDisabled("Waveform unavailable. Load a track to view.");
-        }
-
-        if (!mStatusMessage.empty())
-        {
-            ImGui::TextColored(ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0F),
-                               "%s",
-                               mStatusMessage.c_str());
-        }
+        ImGui::EndTable();
     }
+
+    if (!mStatusMessage.empty())
+    {
+        ImGui::TextColored(ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0F),
+                           "%s",
+                           mStatusMessage.c_str());
+    }
+
     ImGui::End();
+    ImGui::PopStyleVar(3);
 }
 
 void Player::MP3Visualization::localFrameDisplayFcn()

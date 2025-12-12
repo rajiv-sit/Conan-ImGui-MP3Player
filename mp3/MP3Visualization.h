@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <array>
 
 namespace Player
 {
@@ -88,6 +89,8 @@ namespace Player
 		float                    mSeekSeconds;
 		bool                     mUserSeeking;
 		std::string              mStatusMessage;
+		std::vector<float>       mEqGainsDb;
+		std::array<const char*, 5> mEqLabels;
 
 		char mFileInputBuffer[512];
 
@@ -103,7 +106,6 @@ namespace Player
 	};
 
 }
-
 
 
 

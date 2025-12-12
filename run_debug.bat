@@ -2,7 +2,7 @@
 setlocal
 
 set BASEDIR=%~dp0
-set BUILD_DIR=build_debug_latest
+set BUILD_DIR=build_debug_ui
 PUSHD %BASEDIR%
 
 REM Clean previous build dir (ignore errors if locked)
