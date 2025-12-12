@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <filesystem>
 
 #include "IconsFontAwesome5.h"
 #include "MP3Player.h"
@@ -18,6 +19,7 @@ class ImGuiVis : public VisualizationBase
 
     // ImGui initialization
     GLFWwindow* initFcn();
+    std::filesystem::path getExecutableDir() const;
 
     // Callback functions.
     static void closeRequestCallback(GLFWwindow* window);

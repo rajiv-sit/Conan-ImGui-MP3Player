@@ -1,5 +1,9 @@
 #include "ImGuiVis.h"
 
+#include <filesystem>
+#include <array>
+#include <windows.h>
+
 static ImGuiID _dockSpaceId;
 
 ImGuiVis::ImGuiVis(const std::string mp3Sourc)
@@ -8,6 +12,15 @@ ImGuiVis::ImGuiVis(const std::string mp3Sourc)
     , mPauseRequested(false)
     , mMP3SourceFile(mp3Sourc)
 {
+    try
+    {
+        std::filesystem::current_path(getExecutableDir());
+    }
+    catch (const std::exception&)
+    {
+        // if this fails, relative asset paths (fonts/mp3) may not load
+    }
+
     std::cout << "visualizer start!" << std::endl;
     mMP3PlayerVisualization.setMP3FileName(mMP3SourceFile);
     run();
@@ -170,4 +183,12 @@ std::string ImGuiVis::displayTime()
 void ImGuiVis::toLower(std::string& data)
 {
     std::transform(data.begin(), data.end(), data.begin(), [](unsigned char c) { return std::tolower(c); });
+}
+
+std::filesystem::path ImGuiVis::getExecutableDir() const
+{
+    std::array<char, MAX_PATH> pathBuf{};
+    DWORD len = GetModuleFileNameA(nullptr, pathBuf.data(), static_cast<DWORD>(pathBuf.size()));
+    std::filesystem::path exePath(std::string(pathBuf.data(), len));
+    return exePath.parent_path();
 }

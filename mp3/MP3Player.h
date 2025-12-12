@@ -2,6 +2,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <assert.h>
+#include <string>
+#include <vector>
+#include <algorithm>
 #include <mmreg.h>
 #include <msacm.h>
 #include <wmsdk.h>
@@ -21,42 +24,126 @@
 ///              Initally written by Alexandre Mutel and modifed by Rajiv Sit
 class MP3Player
 {
+public:
+	struct Metadata
+	{
+		std::wstring title;
+		std::wstring artist;
+		std::wstring album;
+		DWORD        bitrate = 0;
+	};
+
 private:
 	/// declaring variables
-	HWAVEOUT mHandleWaveOut;
-	DWORD    mBufferLength;
-	double   mDurationInSecond;
-	BYTE* mSoundBuffer;
+	HWAVEOUT     mHandleWaveOut = nullptr;
+	DWORD        mBufferLength  = 0;
+	double       mDurationInSecond = 0.0;
+	double       mStartOffsetSeconds = 0.0;
+	BYTE*        mSoundBuffer = nullptr;
+	WAVEHDR      mWaveHeader{};
+	WAVEFORMATEX mPcmFormat{};
+	bool         mHeaderPrepared = false;
+	bool         mIsOpen = false;
+	bool         mIsPlaying = false;
+	bool         mIsPaused = false;
+	Metadata     mMetadata;
+
+	/// helper to clear playback state
+	void resetWaveOut()
+	{
+		if (mHandleWaveOut)
+		{
+			waveOutReset(mHandleWaveOut);
+			if (mHeaderPrepared)
+			{
+				waveOutUnprepareHeader(mHandleWaveOut, &mWaveHeader, sizeof(mWaveHeader));
+				mHeaderPrepared = false;
+			}
+			waveOutClose(mHandleWaveOut);
+			mHandleWaveOut = nullptr;
+		}
+		mIsPlaying = false;
+		mIsPaused  = false;
+	}
+
+	static std::wstring readHeaderString(IWMHeaderInfo* info, const WCHAR* key)
+	{
+		WORD             streamNum    = 0;
+		WMT_ATTR_DATATYPE attrType    = WMT_TYPE_STRING;
+		WORD             length       = 0;
+		if (FAILED(info->GetAttributeByName(&streamNum, key, &attrType, nullptr, &length)) || length == 0)
+		{
+			return L"";
+		}
+
+		std::vector<WCHAR> buffer(length / sizeof(WCHAR) + 1, 0);
+		if (FAILED(info->GetAttributeByName(&streamNum, key, &attrType, reinterpret_cast<BYTE*>(buffer.data()), &length)))
+		{
+			return L"";
+		}
+		return std::wstring(buffer.data());
+	}
+
+	static DWORD readHeaderDword(IWMHeaderInfo* info, const WCHAR* key)
+	{
+		WORD             streamNum    = 0;
+		WMT_ATTR_DATATYPE attrType    = WMT_TYPE_DWORD;
+		WORD             length       = sizeof(DWORD);
+		DWORD            value        = 0;
+		if (FAILED(info->GetAttributeByName(&streamNum, key, &attrType, reinterpret_cast<BYTE*>(&value), &length)))
+		{
+			return 0;
+		}
+		return value;
+	}
 
 public:
-	/// @brief       loads a MP3 file and convert it internaly to a PCM format, ready for sound playback.
-	///
-	/// @param [in]  name of the input file
-	/// @param [out] handle
-	HRESULT openFromFile(TCHAR* inputFileName)
+	MP3Player()  = default;
+	~MP3Player() { close(); }
+
+	/// @brief       loads a MP3 file (UTF-16 path) and convert it internally to a PCM format, ready for sound playback.
+	HRESULT openFromFile(const wchar_t* inputFileName)
 	{
+		close();
+
 		// Open the mp3 file
-		HANDLE hFile = CreateFile(inputFileName,
+		HANDLE hFile = CreateFileW(inputFileName,
 			GENERIC_READ,          // desired access
 			FILE_SHARE_READ,       // share for reading
 			NULL,                  // no security
 			OPEN_EXISTING,         // existing file only
 			FILE_ATTRIBUTE_NORMAL, // normal file
 			NULL);                 // no attr
-		assert(hFile != INVALID_HANDLE_VALUE);
+		if (hFile == INVALID_HANDLE_VALUE)
+		{
+			return HRESULT_FROM_WIN32(GetLastError());
+		}
 
 		// Get FileSize
 		DWORD fileSize = GetFileSize(hFile, NULL);
-		assert(fileSize != INVALID_FILE_SIZE);
+		if (fileSize == INVALID_FILE_SIZE)
+		{
+			CloseHandle(hFile);
+			return HRESULT_FROM_WIN32(GetLastError());
+		}
 
 		// Alloc buffer for file
 		BYTE* mp3Buffer = (BYTE*)LocalAlloc(LPTR, fileSize);
+		if (!mp3Buffer)
+		{
+			CloseHandle(hFile);
+			return E_OUTOFMEMORY;
+		}
 
 		// Read file and fill mp3Buffer
 		DWORD bytesRead;
 		DWORD resultReadFile = ReadFile(hFile, mp3Buffer, fileSize, &bytesRead, NULL);
-		assert(resultReadFile != 0);
-		assert(bytesRead == fileSize);
+		if (resultReadFile == 0 || bytesRead != fileSize)
+		{
+			CloseHandle(hFile);
+			LocalFree(mp3Buffer);
+			return HRESULT_FROM_WIN32(GetLastError());
+		}
 
 		// Close File
 		CloseHandle(hFile);
@@ -68,6 +155,27 @@ public:
 		LocalFree(mp3Buffer);
 
 		return hr;
+	}
+
+	/// @brief       loads a MP3 file and convert it internaly to a PCM format, ready for sound playback.
+	///
+	/// @param [in]  name of the input file
+	/// @param [out] handle
+	HRESULT openFromFile(TCHAR* inputFileName)
+	{
+		// TCHAR may be narrow if UNICODE is not defined; route everything through wide API.
+		std::wstring widePath;
+		if constexpr (sizeof(TCHAR) == sizeof(wchar_t))
+		{
+			widePath.assign(reinterpret_cast<wchar_t*>(inputFileName));
+		}
+		else
+		{
+			int wideLen = MultiByteToWideChar(CP_ACP, 0, reinterpret_cast<const char*>(inputFileName), -1, nullptr, 0);
+			widePath.resize(static_cast<size_t>(wideLen));
+			MultiByteToWideChar(CP_ACP, 0, reinterpret_cast<const char*>(inputFileName), -1, widePath.data(), wideLen);
+		}
+		return openFromFile(widePath.c_str());
 	}
 
 	/// @brief       loads a MP3 from memory and convert it internaly to a PCM format, ready for sound playback.
@@ -92,7 +200,7 @@ public:
 		IStream* mp3Stream;
 
 		// Define output format
-		static WAVEFORMATEX pcmFormat = {
+		mPcmFormat = {
 		 WAVE_FORMAT_PCM, //format type
 		 2,               // number of channels (i.e. mono, stereo...)
 		 44100,           // sample rate
@@ -174,6 +282,12 @@ public:
 		assert(inputFormat->nSamplesPerSec == 44100);
 		assert(inputFormat->nChannels == 2);
 
+		// Capture metadata (optional fields)
+		mMetadata.title  = readHeaderString(wmHeaderInfo, L"Title");
+		mMetadata.artist = readHeaderString(wmHeaderInfo, L"Author");
+		mMetadata.album  = readHeaderString(wmHeaderInfo, L"WM/AlbumTitle");
+		mMetadata.bitrate = readHeaderDword(wmHeaderInfo, L"Bitrate");
+
 		// Release COM interface
 		wmMediaProperties->Release();
 		wmStreamConfig->Release();
@@ -193,14 +307,14 @@ public:
 		mp3Assert(acmMetrics(NULL, ACM_METRIC_MAX_SIZE_FORMAT, &maxFormatSize));
 
 		// Allocate PCM output sound buffer
-		mBufferLength = mDurationInSecond * pcmFormat.nAvgBytesPerSec;
+		mBufferLength = mDurationInSecond * mPcmFormat.nAvgBytesPerSec;
 		mSoundBuffer = (BYTE*)LocalAlloc(LPTR, mBufferLength);
 
 		acmMp3stream = NULL;
 		switch (acmStreamOpen(&acmMp3stream,    // Open an ACM conversion stream
 			NULL,                       // Query all ACM drivers
 			(LPWAVEFORMATEX)&mp3Format, // input format :  mp3
-			&pcmFormat,                 // output format : pcm
+			&mPcmFormat,                // output format : pcm
 			NULL,                       // No filters
 			0,                          // No async callback
 			0,                          // No data for callback
@@ -268,33 +382,118 @@ public:
 		// Release allocated memory
 		mp3Stream->Release();
 		GlobalFree(mp3HGlobal);
+		mIsOpen             = true;
+		mIsPlaying          = false;
+		mIsPaused           = false;
+		mStartOffsetSeconds = 0.0;
 		return S_OK;
 	}
 
-	/// @brief       pause audio
+	/// @brief       start playback from a specific time (seconds)
+	HRESULT play(double startSeconds = 0.0)
+	{
+		if (!mSoundBuffer || !mIsOpen)
+		{
+			return E_FAIL;
+		}
+
+		resetWaveOut();
+
+		const double clampedSeconds = std::clamp(startSeconds, 0.0, mDurationInSecond);
+		DWORD startByte             = static_cast<DWORD>(clampedSeconds * mPcmFormat.nAvgBytesPerSec);
+		if (startByte >= mBufferLength)
+		{
+			startByte = mBufferLength - mPcmFormat.nBlockAlign;
+		}
+
+		mp3Assert(waveOutOpen(&mHandleWaveOut, WAVE_MAPPER, &mPcmFormat, NULL, 0, CALLBACK_NULL));
+
+		mWaveHeader               = {};
+		mWaveHeader.lpData        = (LPSTR)(mSoundBuffer + startByte);
+		mWaveHeader.dwBufferLength = mBufferLength - startByte;
+
+		mp3Assert(waveOutPrepareHeader(mHandleWaveOut, &mWaveHeader, sizeof(mWaveHeader)));
+		mHeaderPrepared = true;
+		mp3Assert(waveOutWrite(mHandleWaveOut, &mWaveHeader, sizeof(mWaveHeader)));
+
+		mStartOffsetSeconds = startByte / static_cast<double>(mPcmFormat.nAvgBytesPerSec);
+		mIsPlaying          = true;
+		mIsPaused           = false;
+		return S_OK;
+	}
+
+	/// @brief pause audio
 	void __inline setPause()
 	{
-		mp3Assert(waveOutPause(mHandleWaveOut));
+		if (mHandleWaveOut && mIsPlaying && !mIsPaused)
+		{
+			mp3Assert(waveOutPause(mHandleWaveOut));
+			mIsPaused = true;
+		}
 	}
 
-	/// @brief       unset the pause of audio
+	/// @brief resume audio
 	void __inline unSetPause()
 	{
-		mp3Assert(waveOutRestart(mHandleWaveOut));
+		if (mHandleWaveOut && mIsPlaying && mIsPaused)
+		{
+			mp3Assert(waveOutRestart(mHandleWaveOut));
+			mIsPaused = false;
+		}
 	}
 
-	/// @brief       adjust volume
-	void setVolume(const DWORD& value)
+	/// @brief stop playback without releasing decoded audio
+	void stop()
 	{
-		waveOutSetVolume(mHandleWaveOut, value);
+		resetWaveOut();
+		mStartOffsetSeconds = 0.0;
+	}
+
+	/// @brief adjust volume with balance (-1 left, 0 center, 1 right)
+	void setVolume(float master, float balance = 0.0F)
+	{
+		const float clampedMaster  = std::clamp(master, 0.0F, 1.0F);
+		const float clampedBalance = std::clamp(balance, -1.0F, 1.0F);
+
+		float leftGain  = clampedMaster;
+		float rightGain = clampedMaster;
+
+		if (clampedBalance < 0.0F)
+		{
+			rightGain *= 1.0F + clampedBalance;
+		}
+		else if (clampedBalance > 0.0F)
+		{
+			leftGain *= 1.0F - clampedBalance;
+		}
+
+		const DWORD leftValue  = static_cast<DWORD>(leftGain * 0xFFFF);
+		const DWORD rightValue = static_cast<DWORD>(rightGain * 0xFFFF);
+		const DWORD value      = (rightValue << 16) | leftValue;
+
+		HWAVEOUT outHandle = mHandleWaveOut ? mHandleWaveOut
+			: reinterpret_cast<HWAVEOUT>(static_cast<UINT_PTR>(WAVE_MAPPER));
+		waveOutSetVolume(outHandle, value);
 	}
 
 	/// @brief       close the current MP3Player, stop playback and free allocated memory
 	void __inline close()
 	{
-		mp3Assert(waveOutReset(mHandleWaveOut));
-		mp3Assert(waveOutClose(mHandleWaveOut));
-		mp3Assert(LocalFree(mSoundBuffer));
+		resetWaveOut();
+		if (mSoundBuffer)
+		{
+			mp3Assert(LocalFree(mSoundBuffer));
+			mSoundBuffer = nullptr;
+		}
+		mBufferLength      = 0;
+		mDurationInSecond  = 0.0;
+		mStartOffsetSeconds = 0.0;
+		mIsOpen            = false;
+	}
+
+	MMRESULT getPitch(const HWAVEOUT& hwo, const LPDWORD& pdwPitch)
+	{
+		return waveOutGetPitch(hwo, pdwPitch);
 	}
 
 	/// @brief       get the total duration of audio 
@@ -310,37 +509,54 @@ public:
 	/// @param [out] current position from the sound playback (used from sync)
 	double getPosition() {
 		static MMTIME MMTime = { TIME_SAMPLES, 0 };
-		waveOutGetPosition(mHandleWaveOut, &MMTime, sizeof(MMTIME));
-		return ((double)MMTime.u.sample) / (44100.0);
+		if (mHandleWaveOut)
+		{
+			waveOutGetPosition(mHandleWaveOut, &MMTime, sizeof(MMTIME));
+			const double played = ((double)MMTime.u.sample) / (44100.0);
+			return (std::min)(mStartOffsetSeconds + played, mDurationInSecond);
+		}
+		return mStartOffsetSeconds;
 	}
 
-	/// @brief       play the previously opened mp3
-	void play()
+	bool isOpen() const { return mIsOpen; }
+	bool isPlaying() const { return mIsPlaying; }
+	bool isPaused() const { return mIsPaused; }
+
+	const Metadata& getMetadata() const { return mMetadata; }
+
+	/// @brief Extract a small waveform preview from the decoded PCM buffer
+	std::vector<float> getWaveformPreview(size_t sampleCount = 256) const
 	{
-		static WAVEHDR waveHDR = { (LPSTR)mSoundBuffer, mBufferLength };
+		std::vector<float> preview;
+		if (!mSoundBuffer || mBufferLength == 0 || sampleCount == 0)
+		{
+			return preview;
+		}
 
-		// Define output format
-		static WAVEFORMATEX pcmFormat = {
-			WAVE_FORMAT_PCM, // format type
-			2,               // number of channels (i.e. mono, stereo...)
-			44100,           // sample rate
-			4 * 44100,       // for buffer estimation
-			4,               // block size of data
-			16,              // number of bits per sample of mono data
-			0,               // the count in bytes of the size of
-		};
+		const size_t bytesPerSample = mPcmFormat.wBitsPerSample / 8;
+		const size_t frameSize      = bytesPerSample * mPcmFormat.nChannels;
+		if (frameSize == 0)
+		{
+			return preview;
+		}
 
-		mp3Assert(waveOutOpen(&mHandleWaveOut, WAVE_MAPPER, &pcmFormat, NULL, 0, CALLBACK_NULL));
-		mp3Assert(waveOutPrepareHeader(mHandleWaveOut, &waveHDR, sizeof(waveHDR)));
-		mp3Assert(waveOutWrite(mHandleWaveOut, &waveHDR, sizeof(waveHDR)));
+		const size_t totalFrames = mBufferLength / frameSize;
+		const size_t step        = std::max<size_t>(1, totalFrames / sampleCount);
+		preview.reserve(sampleCount);
+
+		const int16_t* samples = reinterpret_cast<const int16_t*>(mSoundBuffer);
+		for (size_t frame = 0; frame < totalFrames && preview.size() < sampleCount; frame += step)
+		{
+			const size_t idx   = frame * mPcmFormat.nChannels;
+			const int16_t left = samples[idx];
+			const int16_t right = (mPcmFormat.nChannels > 1) ? samples[idx + 1] : left;
+			const float   avg  = static_cast<float>((left + right) / 2.0f / 32768.0f);
+			preview.push_back(avg);
+		}
+		return preview;
 	}
 };
 
 #pragma function(memset, memcpy, memcmp)
-
-
-
-
-
 
 

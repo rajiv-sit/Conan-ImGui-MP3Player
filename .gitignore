@@ -1,6 +1,9 @@
 # Custom
 /build
+/build_run
+/build_clean
 CMakeLists.txt.user
+CMakeUserPresets.json
 
 # Prerequisites
 *.d

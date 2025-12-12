@@ -3,6 +3,9 @@
 #include "mp3/MP3Player.h"
 #include "UTILITYMath.h"
 #include "VisualizationBase.h"
+#include <vector>
+#include <string>
+#include <filesystem>
 
 namespace Player
 {
@@ -77,12 +80,27 @@ namespace Player
 		unsigned long mVolumeLevel;
 		bool mVisualFrameStatus;
 
+		std::vector<std::string> mPlaylist;
+		int                      mCurrentIndex;
+		float                    mVolumeNormalized;
+		float                    mBalance;
+		float                    mSeekSeconds;
+		bool                     mUserSeeking;
+		std::string              mStatusMessage;
+
+		char mFileInputBuffer[512];
+
+		bool loadCurrentTrack();
+		std::filesystem::path getExecutableDir() const;
+		void playSelected(double startSeconds = 0.0);
+		void moveToTrack(int delta);
+		std::string wideToUtf8(const std::wstring& wstr);
+
+		char* mBuffer;
+
 	};
 
 }
-
-
-
 
 
 
