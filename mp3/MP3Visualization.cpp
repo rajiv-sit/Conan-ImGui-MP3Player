@@ -244,7 +244,8 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
             {
                 ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_PlotLinesHovered, ImVec4(UTILITYColors::Orange.r, UTILITYColors::Orange.g, UTILITYColors::Orange.b, 1.0f));
-                ImGui::PlotLines("##wave", mWaveformPreview.data(), static_cast<int>(mWaveformPreview.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(-FLT_MIN, 120));
+                ImVec2 waveSize(ImGui::GetContentRegionAvail().x, 120.0f);
+                ImGui::PlotLines("##wave", mWaveformPreview.data(), static_cast<int>(mWaveformPreview.size()), 0, nullptr, -1.0F, 1.0F, waveSize);
                 const float prog = (duration > 0.0F) ? std::clamp(static_cast<float>(mAudioPlayer.getPosition()) / duration, 0.0F, 1.0F) : 0.0F;
                 ImVec2 min = ImGui::GetItemRectMin();
                 ImVec2 max = ImGui::GetItemRectMax();

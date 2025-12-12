@@ -1,50 +1,50 @@
 # Conan-ImGui-MP3Player
-Interactive MP3 player built with ImGui/GLFW/OpenGL on Windows. Audio is decoded via Windows Media/ACM APIs and rendered with ImGui widgets and a PCM-derived waveform.
+Modern ImGui-based MP3 player that decodes via Windows Media/ACM, renders transport controls, EQ, metadata, and a cached waveform preview drawn with OpenGL/ImGui.
 
-## Features
-- Playlist: add paths manually, select, and jump prev/next.
-- Transport: play, pause/resume, stop, and seek slider tied to playback position.
-- Volume and stereo balance controls.
-- Metadata display (title/artist/album/bitrate when present).
-- Waveform preview computed from decoded PCM.
+![Visualizer placeholder](./assets/visualizer/screenshot-placeholder.png)
 
-## Prerequisites (Windows)
-- Visual Studio 2022 with C++ toolset
-- CMake (>=3.28)
-- Conan 2
+## Highlights
+- **Modern layout**: two-column UI with playlist, playback controls, metadata, waveform, and EQ sliders laid out with subtle rounding and spacing.
+- **Playback control**: play/pause/resume, stop, seek slider, balance, and volume are all tied to the native waveOut playback.
+- **Waveform with playhead**: PCM-derived preview stored when playback starts, rendered in orange with a red hover line that reflects the current position.
+- **EQ state**: slider-driven gains stored in `MP3Player` (future DSP hookup) to keep UI responsive without audio glitches.
+- **Flexible track loading**: paths resolved against the executable directory, repo root, and provided `test/` folder.
 
-## Build and Run
-1) Install and configure dependencies via Conan + CMake:
-```
-run_debug.bat
-```
-   - If the legacy `build` folder is locked, use a fresh dir:
-```
-conan install . --output-folder=build_clean --build=missing --settings=build_type=Debug
-cmake -S . -B build_clean -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE=build_clean/build/generators/conan_toolchain.cmake
-cmake --build build_clean --config Debug
-```
-2) Copy runtime assets next to the EXE (if not already placed):
-```
-copy build_clean\*.ttf build_clean\Debug\
-copy test\Oryza.mp3 build_clean\Debug\
-```
-3) Run:
-```
-build_clean\Debug\mp3player.exe
-```
-If `run_debug.bat` is required, ensure no stale `build/build/generators` folder remains from prior runs; otherwise, use a fresh build directory as above.
+## Build & Run (Windows)
+1. Open a PowerShell shell in the repo root and run:
+   ```
+   run_debug.bat
+   ```
+   That script:
+   - installs dependencies via Conan,
+   - configures and builds in `build_debug_modern`,
+   - copies fonts from `assets/visualizer/webfonts` and `test/Oryza.mp3` into the debug folder,
+   - launches `Debug\mp3player.exe`.
+2. If the script fails because `build_debug_modern/build/generators` was left locked from a previous run, rerun manually:
+   ```
+   conan install . --output-folder=build_debug_modern --build=missing --settings=build_type=Debug
+   cmake -S . -B build_debug_modern -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE=build_debug_modern/build/generators/conan_toolchain.cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
+   cmake --build build_debug_modern --config Debug
+   ```
+   Afterward, run the EXE:
+   ```
+   build_debug_modern\Debug\mp3player.exe
+   ```
 
-## Usage
-- Add track: type a path in the “Enter MP3 path” box and click “Add to Playlist”.
-  - Relative paths are resolved against the EXE directory, its parents, and the repo/test folder.
-- Select a track from the playlist; press Play. Use Pause/Resume, Stop, and Next/Previous.
-- Drag the Seek slider to jump within the track (restarts playback from that position).
-- Adjust Volume (0–1) and Balance (-1 left to +1 right).
-- Metadata and waveform appear when a track is successfully loaded.
-- Status messages show load errors (path attempted and HRESULT-derived failures).
+## Workflow / Usage
+- **Add files**: paste a path into the `Enter MP3 path` field and click `Add to Playlist`. Relative paths are resolved around the EXE and repo.
+- **Playback**: select an entry, hit `Play`, and the waveform loads on demand. The Seek bar and playhead remain synchronized via the native position query.
+- **Volume / balance**: sliders immediately update `waveOut` volume. EQ sliders store gain values without touching the core buffer.
+- **Navigator**: use `Previous` / `Next` buttons to stroll through the playlist; the waveform and metadata refresh each time.
+- **Status feedback**: errors show file-not-found, load failures, and waveform availability tips (visible while playing).
+
+## Design Notes
+- **Waveform cache**: prevents re-decoding while the track plays and guards the plot with `isPlaying()` so the visual shimmer only shows during active playback.
+- **Orange waveform + red playhead**: `ImGui::PlotLines` uses the available width to draw horizontal data, and a draw-list line marks progress.
+- **EQ alignment**: six sliders are arranged vertically with space, and changes are stored in `MP3Player` for future DSP integration.
 
 ## Troubleshooting
-- “Failed to load file”: ensure the file exists; if using relative paths, place the MP3 next to the EXE or provide an absolute path.
-- Font or asset issues: run the copy commands above to ensure `.ttf` files and `Oryza.mp3` sit beside `mp3player.exe`.
-- Locked old build dirs: delete or ignore the legacy `build/build/generators` if it blocks `run_debug.bat`; you can use a fresh `build_clean` folder as shown.
+- **Waveform missing**: ensure playback is running; the plot is intentionally gated to only show while the audio loop is active.
+- **File loading failure**: check the resolved path printed in status, and confirm the MP3 exists relative to the exe.
+- **Locked generators folder**: delete or rebuild with a new folder name before rerunning `run_debug.bat`.
+
