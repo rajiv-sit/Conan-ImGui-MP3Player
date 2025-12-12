@@ -380,6 +380,9 @@ public:
 		LocalFree(rawbuf);
 		mp3Assert(acmStreamClose(acmMp3stream, 0));
 
+		// Update length to match actual decoded PCM size
+		mBufferLength = totalDecompressedSize;
+
 		// Release allocated memory
 		mp3Stream->Release();
 		GlobalFree(mp3HGlobal);
@@ -565,4 +568,3 @@ public:
 };
 
 #pragma function(memset, memcpy, memcmp)
-

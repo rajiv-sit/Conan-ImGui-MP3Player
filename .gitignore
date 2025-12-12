@@ -2,6 +2,7 @@
 /build
 /build_run
 /build_clean
+/build_debug_*
 CMakeLists.txt.user
 CMakeUserPresets.json
 
