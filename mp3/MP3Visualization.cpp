@@ -6,6 +6,7 @@
 #include <cfloat>
 #include <filesystem>
 #include <limits>
+#include <algorithm>
 #include <windows.h>
 
 // Helper to wire demo markers located in code to an interactive browser
@@ -205,6 +206,15 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
         if (!waveform.empty())
         {
             ImGui::PlotLines("Waveform", waveform.data(), static_cast<int>(waveform.size()), 0, nullptr, -1.0F, 1.0F, ImVec2(0, 90));
+
+            // Overlay playhead indicator
+            const float current = static_cast<float>(mAudioPlayer.getPosition());
+            const float prog    = (duration > 0.0F) ? std::clamp(current / duration, 0.0F, 1.0F) : 0.0F;
+            ImVec2 min = ImGui::GetItemRectMin();
+            ImVec2 max = ImGui::GetItemRectMax();
+            const float x = min.x + prog * (max.x - min.x);
+            auto* draw = ImGui::GetWindowDrawList();
+            draw->AddLine(ImVec2(x, min.y), ImVec2(x, max.y), IM_COL32(255, 64, 64, 255), 2.0f);
         }
         else
         {
