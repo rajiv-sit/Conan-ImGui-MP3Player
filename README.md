@@ -33,6 +33,7 @@ copy test\Oryza.mp3 build_clean\Debug\
 ```
 build_clean\Debug\mp3player.exe
 ```
+If `run_debug.bat` is required, ensure no stale `build/build/generators` folder remains from prior runs; otherwise, use a fresh build directory as above.
 
 ## Usage
 - Add track: type a path in the “Enter MP3 path” box and click “Add to Playlist”.

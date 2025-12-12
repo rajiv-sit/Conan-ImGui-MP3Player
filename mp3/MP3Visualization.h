@@ -79,6 +79,7 @@ namespace Player
 		bool mPauseStatus;
 		unsigned long mVolumeLevel;
 		bool mVisualFrameStatus;
+		bool mQuitRequested;
 
 		std::vector<std::string> mPlaylist;
 		int                      mCurrentIndex;
@@ -92,6 +93,7 @@ namespace Player
 
 		bool loadCurrentTrack();
 		std::filesystem::path getExecutableDir() const;
+		bool quitRequested() const { return mQuitRequested; }
 		void playSelected(double startSeconds = 0.0);
 		void moveToTrack(int delta);
 		std::string wideToUtf8(const std::wstring& wstr);
@@ -101,7 +103,6 @@ namespace Player
 	};
 
 }
-
 
 
 

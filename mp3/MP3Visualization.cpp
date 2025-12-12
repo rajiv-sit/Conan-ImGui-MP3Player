@@ -36,6 +36,7 @@ Player::MP3Visualization::MP3Visualization()
     , mSeekSeconds(0.0F)
     , mUserSeeking(false)
     , mStatusMessage()
+    , mQuitRequested(false)
     , mBuffer(new char[1000])
 {
     memset(mFileInputBuffer, 0, sizeof(mFileInputBuffer));
@@ -92,11 +93,11 @@ void Player::MP3Visualization::worldFramePreDisplayFcn(bool demoMode)
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Open", "Ctrl+O")) { }
-            if (ImGui::MenuItem("Close", "Ctrl+W")) { mVisualFrameStatus = false; }
+            if (ImGui::MenuItem("Close", "Ctrl+W")) { mVisualFrameStatus = false; mQuitRequested = true; }
             ImGui::EndMenu();
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Quit", "Alt+F4")) {}
+        if (ImGui::MenuItem("Quit", "Alt+F4")) { mQuitRequested = true; }
         ImGui::EndMenuBar();
     }
 

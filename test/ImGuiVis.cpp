@@ -86,6 +86,11 @@ void ImGuiVis::run()
         }
 
         glfwSwapBuffers(window);
+
+        if (mMP3PlayerVisualization.quitRequested())
+        {
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
     }
 
     cleanUp();
@@ -99,7 +104,7 @@ void ImGuiVis::glfw_error_callback(int error, const char* description)
 
 void ImGuiVis::closeRequestCallback(GLFWwindow* window)
 {
-    glfwSetWindowShouldClose(window, GLFW_FALSE);
+    glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
 GLFWwindow* ImGuiVis::initFcn()
