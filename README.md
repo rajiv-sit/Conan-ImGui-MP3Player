@@ -1,7 +1,7 @@
 # Conan-ImGui-MP3Player
 Modern ImGui-based MP3 player that decodes via Windows Media/ACM, renders transport controls, EQ, metadata, and a cached waveform preview drawn with OpenGL/ImGui.
 
-![Visualizer placeholder](./assets/visualizer/screenshot-placeholder.png)
+<img width="417" height="820" alt="image" src="https://github.com/user-attachments/assets/265d4983-71ae-4600-95bb-7694af6f807b" />
 
 ## Highlights
 - **Modern layout**: two-column UI with playlist, playback controls, metadata, waveform, and EQ sliders laid out with subtle rounding and spacing.
